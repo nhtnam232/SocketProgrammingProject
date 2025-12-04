@@ -2,6 +2,7 @@ from tkinter import *
 import tkinter.messagebox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
+import queue
 
 from RtpPacket import RtpPacket
 
@@ -34,6 +35,8 @@ class Client:
 		self.teardownAcked = 0
 		self.connectToServer()
 		self.frameNbr = 0
+		self.frameQueue = queue.Queue()
+		self.BUFFER_THRESHOLD = 20
 		
 	def createWidgets(self):
 		"""Build GUI."""
@@ -89,6 +92,7 @@ class Client:
 			self.playEvent = threading.Event()
 			self.playEvent.clear()
 			self.sendRtspRequest(self.PLAY)
+			self.playBuffer()
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
@@ -104,7 +108,8 @@ class Client:
 										
 					if currFrameNbr > self.frameNbr: # Discard the late packet
 						self.frameNbr = currFrameNbr
-						self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
+						##self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
+						self.frameQueue.put(rtpPacket.getPayload())
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.isSet(): 
@@ -116,7 +121,16 @@ class Client:
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 					self.rtpSocket.close()
 					break
-					
+
+	def playBuffer(self):
+		if self.state == self.PLAYING:
+			if not self.frameQueue.empty():
+				if self.frameQueue.qsize() < self.BUFFER_THRESHOLD and self.frameNbr < self.BUFFER_THRESHOLD:
+					print("Buffering: " + str(self.frameQueue.qsize()))	
+				else:
+					data = self.frameQueue.get()
+					self.updateMovie(self.writeFrame(data))
+			self.master.after(50, self.playBuffer)
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
 		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
