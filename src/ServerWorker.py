@@ -122,20 +122,32 @@ class ServerWorker:
 				try:
 					address = self.clientInfo['rtspSocket'][1][0]
 					port = int(self.clientInfo['rtpPort'])
-					self.clientInfo['rtpSocket'].sendto(self.makeRtp(data, frameNumber),(address,port))
+					MAX_PAYLOAD_SIZE = 1400
+					data_len = len(data)
+					cur_pos = 0
+					while cur_pos < data_len:
+						end_pos = cur_pos + MAX_PAYLOAD_SIZE
+						if end_pos > data_len:
+							end_pos = data_len
+						if end_pos == data_len:
+							marker = 1
+						else:
+							marker = 0
+						chunk = data[cur_pos:end_pos]
+						self.clientInfo['rtpSocket'].sendto(self.makeRtp(chunk, frameNumber, marker), (address, port))
+						cur_pos = end_pos
 				except:
 					print("Connection Error")
 					#print('-'*60)
 					#traceback.print_exc(file=sys.stdout)
 					#print('-'*60)
 
-	def makeRtp(self, payload, frameNbr):
+	def makeRtp(self, payload, frameNbr, marker):
 		"""RTP-packetize the video data."""
 		version = 2
 		padding = 0
 		extension = 0
 		cc = 0
-		marker = 0
 		pt = 26 # MJPEG type
 		seqnum = frameNbr
 		ssrc = 0 

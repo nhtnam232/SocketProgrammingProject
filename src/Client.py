@@ -37,6 +37,7 @@ class Client:
 		self.frameNbr = 0
 		self.frameQueue = queue.Queue()
 		self.BUFFER_THRESHOLD = 20
+		self.currentFrameData = b""
 		
 	def createWidgets(self):
 		"""Build GUI."""
@@ -103,13 +104,16 @@ class Client:
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
 					
-					currFrameNbr = rtpPacket.seqNum()
-					print("Current Seq Num: " + str(currFrameNbr))
-										
-					if currFrameNbr > self.frameNbr: # Discard the late packet
-						self.frameNbr = currFrameNbr
-						##self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
-						self.frameQueue.put(rtpPacket.getPayload())
+					self.currentFrameData += rtpPacket.getPayload()
+
+					if rtpPacket.getMarker() == 1:
+						currFrameNbr = rtpPacket.seqNum()
+						print("Frame: ", currFrameNbr)
+						if currFrameNbr > self.frameNbr: # Discard the late packet
+							self.frameNbr = currFrameNbr
+							##self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
+							self.frameQueue.put(self.currentFrameData)
+						self.currentFrameData = b""
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.isSet(): 

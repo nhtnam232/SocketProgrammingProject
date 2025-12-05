@@ -22,7 +22,8 @@ class RtpPacket:
 		
 		# Get the payload from the argument
 		# self.payload = ...
-		
+	def getMarker(self):
+		return (self.header[1] >> 7) & 1
 	def decode(self, byteStream):
 		"""Decode the RTP packet."""
 		self.header = bytearray(byteStream[:HEADER_SIZE])
