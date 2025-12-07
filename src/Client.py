@@ -1,5 +1,5 @@
 from tkinter import *
-import tkinter.messagebox
+import tkinter.messagebox as tkMessageBox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 
@@ -249,22 +249,25 @@ class Client:
 						# Flag the teardownAcked to close the socket.
 						self.teardownAcked = 1 
 	
+	
+
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
-		#-------------
-		# TO COMPLETE
-		#-------------
-		# Create a new datagram socket to receive RTP packets from the server
-		# self.rtpSocket = ...
-		
-		# Set the timeout value of the socket to 0.5sec
-		# ...
-		
 		try:
-			# Bind the socket to the address using the RTP port given by the client user
-			# ...
-		except:
-			tkMessageBox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+			# T?o UDP socket
+			self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+			# Set timeout cho socket (0.5 gi�y)
+			self.rtpSocket.settimeout(0.5)
+
+			# Bind socket v�o ??a ch? IP v� port (0.0.0.0 ?? l?ng nghe m?i interface)
+			self.rtpSocket.bind(("0.0.0.0", self.rtpPort))
+
+			print(f"RTP socket opened on port {self.rtpPort}")
+
+		except Exception as e:
+			tkMessageBox.showwarning('Unable to Bind', f'Unable to bind PORT={self.rtpPort}\nError: {e}')
+
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
