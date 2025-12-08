@@ -110,10 +110,10 @@ class ServerWorker:
 	def sendRtp(self):
 		"""Send RTP packets over UDP."""
 		while True:
-			self.clientInfo['event'].wait(0.05) 
+			self.clientInfo['event'].wait(0.04) 
 			
 			# Stop sending if request is PAUSE or TEARDOWN
-			if self.clientInfo['event'].isSet(): 
+			if self.clientInfo['event'].is_set(): 
 				break 
 				
 			data = self.clientInfo['videoStream'].nextFrame()
@@ -151,7 +151,6 @@ class ServerWorker:
 		pt = 26 # MJPEG type
 		seqnum = frameNbr
 		ssrc = 0 
-		
 		rtpPacket = RtpPacket()
 		
 		rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)

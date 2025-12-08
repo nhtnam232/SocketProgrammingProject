@@ -1,6 +1,5 @@
 from tkinter import *
-from tkinter import messagebox
-import tkinter.messagebox
+import tkinter.messagebox as tkMessageBox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 import queue
@@ -38,6 +37,7 @@ class Client:
 		self.frameNbr = 0
 		self.frameQueue = queue.Queue()
 		self.BUFFER_THRESHOLD = 20
+		self.init_buffer = True
 		self.currentFrameData = b""
 		
 	def createWidgets(self):
@@ -106,18 +106,19 @@ class Client:
 					rtpPacket.decode(data)
 					
 					self.currentFrameData += rtpPacket.getPayload()
-
 					if rtpPacket.getMarker() == 1:
 						currFrameNbr = rtpPacket.seqNum()
-						print("Frame: ", currFrameNbr)
+						print("Received frame: ", currFrameNbr)
 						if currFrameNbr > self.frameNbr: # Discard the late packet
 							self.frameNbr = currFrameNbr
 							##self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
 							self.frameQueue.put(self.currentFrameData)
 						self.currentFrameData = b""
+					else:
+						print(f"  + Reassembling Frame {rtpPacket.seqNum()}")
 			except:
 				# Stop listening upon requesting PAUSE or TEARDOWN
-				if self.playEvent.isSet(): 
+				if self.playEvent.is_set():
 					break
 				
 				# Upon receiving ACK for TEARDOWN request,
@@ -130,12 +131,16 @@ class Client:
 	def playBuffer(self):
 		if self.state == self.PLAYING:
 			if not self.frameQueue.empty():
-				if self.frameQueue.qsize() < self.BUFFER_THRESHOLD and self.frameNbr < self.BUFFER_THRESHOLD:
-					print("Buffering: " + str(self.frameQueue.qsize()))	
+				if self.init_buffer == True and self.frameQueue.qsize() < self.BUFFER_THRESHOLD:
+					print("Pre-buffering, frame:  " + str(self.frameQueue.qsize()))	
 				else:
 					data = self.frameQueue.get()
 					self.updateMovie(self.writeFrame(data))
-			self.master.after(50, self.playBuffer)
+					self.init_buffer = False
+			else:
+				print("Buffer is empty!, please wait for data form Server")
+				self.init_buffer = True
+		self.master.after(50, self.playBuffer)
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
 		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
@@ -157,7 +162,7 @@ class Client:
 		try:
 			self.rtspSocket.connect((self.serverAddr, self.serverPort))
 		except:
-			messagebox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
+			tkMessageBox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
 	
 	def sendRtspRequest(self, requestCode):
 		"""Send RTSP request to the server."""	
@@ -257,25 +262,30 @@ class Client:
 						# Flag the teardownAcked to close the socket.
 						self.teardownAcked = 1 
 	
+	
+
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
-
-		# Create a new datagram socket to receive RTP packets from the server
-		self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		
-		# Set the timeout value of the socket to 0.5sec
-		self.rtpSocket.settimeout(0.5)
-		
 		try:
-			# Bind the socket to the address using the RTP port given by the client user
-			self.rtpSocket.bind(('', self.rtpPort))
-		except:
-			messagebox.showwarning('Unable to Bind', 'Unable to bind PORT=%d' %self.rtpPort)
+			# T?o UDP socket
+			self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+			# Set timeout cho socket (0.5 gi�y)
+			self.rtpSocket.settimeout(0.5)
+
+			# Bind socket v�o ??a ch? IP v� port (0.0.0.0 ?? l?ng nghe m?i interface)
+			self.rtpSocket.bind(("0.0.0.0", self.rtpPort))
+
+			print(f"RTP socket opened on port {self.rtpPort}")
+
+		except Exception as e:
+			tkMessageBox.showwarning('Unable to Bind', f'Unable to bind PORT={self.rtpPort}\nError: {e}')
+
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
 		self.pauseMovie()
-		if messagebox.askokcancel("Quit?", "Are you sure you want to quit?"):
+		if tkMessageBox.askokcancel("Quit?", "Are you sure you want to quit?"):
 			self.exitClient()
 		else: # When the user presses cancel, resume playing.
 			self.playMovie()
