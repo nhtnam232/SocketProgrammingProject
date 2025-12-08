@@ -3,6 +3,7 @@ import tkinter.messagebox as tkMessageBox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
 import queue
+import time
 
 from RtpPacket import RtpPacket
 
@@ -98,21 +99,26 @@ class Client:
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
+		totalBytes = 0
+		frameLoss = 0
+		startTime = time.time()
 		while True:
 			try:
 				data = self.rtpSocket.recv(20480)
 				if data:
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
-					
+					totalBytes += len(data)
 					self.currentFrameData += rtpPacket.getPayload()
 					if rtpPacket.getMarker() == 1:
 						currFrameNbr = rtpPacket.seqNum()
 						print("Received frame: ", currFrameNbr)
 						if currFrameNbr > self.frameNbr: # Discard the late packet
+							frameLoss += currFrameNbr - self.frameNbr - 1
 							self.frameNbr = currFrameNbr
 							##self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
 							self.frameQueue.put(self.currentFrameData)
+							
 						self.currentFrameData = b""
 					else:
 						print(f"  + Reassembling Frame {rtpPacket.seqNum()}")
@@ -127,6 +133,12 @@ class Client:
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 					self.rtpSocket.close()
 					break
+		endTime = time.time()
+		print("Frame Loss: ", frameLoss)
+		print("Total bytes: ", totalBytes, " bytes")
+		if endTime - startTime > 0:
+			print(f"Speed: {(totalBytes / (endTime - startTime)):.2f} bytes/s")
+
 
 	def playBuffer(self):
 		if self.state == self.PLAYING:
