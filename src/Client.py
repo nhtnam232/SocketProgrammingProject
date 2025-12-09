@@ -68,7 +68,7 @@ class Client:
 		self.teardown.grid(row=1, column=3, padx=2, pady=2)
 		
 		# Create a label to display the movie
-		self.label = Label(self.master, height=19)
+		self.label = Label(self.master)
 		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
 	
 	def setupMovie(self):
@@ -164,8 +164,9 @@ class Client:
 	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
+		
 		photo = ImageTk.PhotoImage(Image.open(imageFile))
-		self.label.configure(image = photo, height=288) 
+		self.label.configure(image = photo) 
 		self.label.image = photo
 		
 	def connectToServer(self):
@@ -287,6 +288,7 @@ class Client:
 
 			# Bind socket v�o ??a ch? IP v� port (0.0.0.0 ?? l?ng nghe m?i interface)
 			self.rtpSocket.bind(("0.0.0.0", self.rtpPort))
+			self.rtpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 5*1024*1024)
 
 			print(f"RTP socket opened on port {self.rtpPort}")
 
