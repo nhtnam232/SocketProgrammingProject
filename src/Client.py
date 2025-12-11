@@ -152,6 +152,8 @@ class Client:
 				print("Buffer is empty!, please wait for data form Server")
 				self.init_buffer = True
 			self.master.after(50, self.playBuffer)
+		else: 
+			return;
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
 		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
