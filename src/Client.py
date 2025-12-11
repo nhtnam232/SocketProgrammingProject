@@ -95,7 +95,6 @@ class Client:
 			self.playEvent = threading.Event()
 			self.playEvent.clear()
 			self.sendRtspRequest(self.PLAY)
-			self.playBuffer()
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
@@ -152,7 +151,7 @@ class Client:
 			else:
 				print("Buffer is empty!, please wait for data form Server")
 				self.init_buffer = True
-		self.master.after(50, self.playBuffer)
+			self.master.after(50, self.playBuffer)
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
 		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
@@ -262,6 +261,8 @@ class Client:
 					elif self.requestSent == self.PLAY:
 						# Update RTSP state.
 						self.state = self.PLAYING
+						self.playBuffer()
+
 
 					elif self.requestSent == self.PAUSE:
 						# Update RTSP state.
