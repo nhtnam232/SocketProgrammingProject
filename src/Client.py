@@ -40,6 +40,7 @@ class Client:
 		self.BUFFER_THRESHOLD = 20
 		self.init_buffer = True
 		self.currentFrameData = b""
+		self.updateButtonStates()
 		
 	def createWidgets(self):
 		"""Build GUI."""
@@ -69,7 +70,30 @@ class Client:
 		
 		# Create a label to display the movie
 		self.label = Label(self.master)
-		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5) 
+		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
+		MIN_HEIGHT_PIXELS = 300
+		self.master.grid_rowconfigure(0, minsize=MIN_HEIGHT_PIXELS, weight=1)
+
+	def updateButtonStates(self):
+		"""Cập nhật trạng thái các nút dựa trên trạng thái RTSP hiện tại."""
+		if self.state == self.INIT:
+			# only SETUP
+			self.setup.config(state=NORMAL)
+			self.start.config(state=DISABLED)
+			self.pause.config(state=DISABLED)
+			self.teardown.config(state=DISABLED)
+		elif self.state == self.READY:
+			# PLAY and TEARDOWN
+			self.setup.config(state=DISABLED)
+			self.start.config(state=NORMAL)
+			self.pause.config(state=DISABLED)
+			self.teardown.config(state=NORMAL)
+		elif self.state == self.PLAYING:
+			# PAUSE and TEARDOWN
+			self.setup.config(state=DISABLED)
+			self.start.config(state=DISABLED)
+			self.pause.config(state=NORMAL)
+			self.teardown.config(state=NORMAL)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -257,18 +281,21 @@ class Client:
 					if self.requestSent == self.SETUP:
 						# Update RTSP state.
 						self.state = self.READY
+						self.updateButtonStates()
 						# Open RTP port.
 						self.openRtpPort()
 
 					elif self.requestSent == self.PLAY:
 						# Update RTSP state.
 						self.state = self.PLAYING
+						self.updateButtonStates()
+						
 						self.playBuffer()
-
 
 					elif self.requestSent == self.PAUSE:
 						# Update RTSP state.
 						self.state = self.READY
+						self.updateButtonStates()
 						# The play thread exits. A new thread is created on resume.
 						self.playEvent.set()
 
@@ -277,7 +304,6 @@ class Client:
 						self.state = self.INIT
 						# Flag the teardownAcked to close the socket.
 						self.teardownAcked = 1 
-	
 	
 
 	def openRtpPort(self):
@@ -306,3 +332,4 @@ class Client:
 			self.exitClient()
 		else: # When the user presses cancel, resume playing.
 			self.playMovie()
+
