@@ -175,7 +175,7 @@ class Client:
 			else:
 				print("Buffer is empty!, please wait for data form Server")
 				self.init_buffer = True
-			self.master.after(50, self.playBuffer)
+			self.master.after(40, self.playBuffer)
 		else: 
 			return;
 	def writeFrame(self, data):
@@ -190,7 +190,21 @@ class Client:
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
 		
-		photo = ImageTk.PhotoImage(Image.open(imageFile))
+		image = Image.open(imageFile)
+		orig_w, orig_h = image.size
+		MAX_W = 960 
+		MAX_H = 540
+
+		if orig_w > MAX_W or orig_h > MAX_H:
+			ratio = min(MAX_W/orig_w, MAX_H/orig_h)
+			new_w = int(orig_w * ratio)
+			new_h = int(orig_h * ratio)
+			
+			image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+		else:
+			pass
+
+		photo = ImageTk.PhotoImage(image)
 		self.label.configure(image = photo) 
 		self.label.image = photo
 		
