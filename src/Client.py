@@ -186,14 +186,13 @@ class Client:
 		file.close()
 		
 		return cachename
-	
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
 		
 		image = Image.open(imageFile)
 		orig_w, orig_h = image.size
-		MAX_W = 960 
-		MAX_H = 540
+		MAX_W = 1280 
+		MAX_H = 720
 
 		if orig_w > MAX_W or orig_h > MAX_H:
 			ratio = min(MAX_W/orig_w, MAX_H/orig_h)
