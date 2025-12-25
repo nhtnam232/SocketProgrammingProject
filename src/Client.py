@@ -6,6 +6,8 @@ import queue
 import time
 
 from RtpPacket import RtpPacket
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -41,41 +43,58 @@ class Client:
 		self.init_buffer = True
 		self.currentFrameData = b""
 		self.updateButtonStates()
+
+		self.stats_time = []
+		self.stats_speed = []
+		self.total_bytes_interval = 0
+		self.last_update_time = time.time()
+		self.start_time = time.time()
+		self.stats_window = None # Cửa sổ vẽ biểu đồ
+		self.stats_after_id = None  # ID cho biểu đồ
+		self.buffer_after_id = None # ID cho playBuffer
 		
 	def createWidgets(self):
 		"""Build GUI."""
 		# Create Setup button
-		self.setup = Button(self.master, width=20, padx=3, pady=3)
+		self.setup = Button(self.master, width=15, padx=3, pady=3)
 		self.setup["text"] = "Setup"
 		self.setup["command"] = self.setupMovie
 		self.setup.grid(row=1, column=0, padx=2, pady=2)
 		
 		# Create Play button		
-		self.start = Button(self.master, width=20, padx=3, pady=3)
+		self.start = Button(self.master, width=15, padx=3, pady=3)
 		self.start["text"] = "Play"
 		self.start["command"] = self.playMovie
 		self.start.grid(row=1, column=1, padx=2, pady=2)
 		
 		# Create Pause button			
-		self.pause = Button(self.master, width=20, padx=3, pady=3)
+		self.pause = Button(self.master, width=15, padx=3, pady=3)
 		self.pause["text"] = "Pause"
 		self.pause["command"] = self.pauseMovie
 		self.pause.grid(row=1, column=2, padx=2, pady=2)
 		
 		# Create Teardown button
-		self.teardown = Button(self.master, width=20, padx=3, pady=3)
+		self.teardown = Button(self.master, width=15, padx=3, pady=3)
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
 		self.teardown.grid(row=1, column=3, padx=2, pady=2)
+
+		self.stats = Button(self.master, width=15, padx=3, pady=3)
+		self.stats["text"] = "Speed Graph"
+		self.stats["command"] = self.showSpeedGraph
+		self.stats.grid(row=1, column=4, padx=2, pady=2)
 		
 		# Create a label to display the movie
 		self.label = Label(self.master)
-		self.label.grid(row=0, column=0, columnspan=4, sticky=W+E+N+S, padx=5, pady=5)
+		self.label.grid(row=0, column=0, columnspan=5, sticky=W+E+N+S, padx=5, pady=5)
 		MIN_HEIGHT_PIXELS = 300
 		self.master.grid_rowconfigure(0, minsize=MIN_HEIGHT_PIXELS, weight=1)
 
 	def updateButtonStates(self):
 		"""Cập nhật trạng thái các nút dựa trên trạng thái RTSP hiện tại."""
+		if not self.master.winfo_exists():
+			return
+
 		if self.state == self.INIT:
 			# only SETUP
 			self.setup.config(state=NORMAL)
@@ -102,7 +121,13 @@ class Client:
 	
 	def exitClient(self):
 		"""Teardown button handler."""
-		self.sendRtspRequest(self.TEARDOWN)		
+		self.sendRtspRequest(self.TEARDOWN)
+
+		if hasattr(self, 'buffer_after_id') and self.buffer_after_id:
+			self.master.after_cancel(self.buffer_after_id)
+			self.buffer_after_id = None
+		self.closeStatsWindow()
+
 		self.master.destroy() # Close the gui window
 		os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
 
@@ -125,10 +150,34 @@ class Client:
 		totalBytes = 0
 		frameLoss = 0
 		startTime = time.time()
+
+		self.total_bytes_interval = 0
+		self.start_time = time.time()
+		self.last_update_time = self.start_time
+
 		while True:
 			try:
 				data = self.rtpSocket.recv(20480)
 				if data:
+
+					self.total_bytes_interval += len(data)
+					now = time.time()
+					
+					if now - self.last_update_time >= 0.5:
+						elapsed = now - self.start_time
+						speed = (self.total_bytes_interval / (now - self.last_update_time)) / 1024 # KB/s
+						
+						self.stats_time.append(elapsed)
+						self.stats_speed.append(speed)
+						
+						# Giới hạn dữ liệu hiển thị trong 30 điểm gần nhất
+						if len(self.stats_time) > 30:
+							self.stats_time.pop(0)
+							self.stats_speed.pop(0)
+							
+						self.total_bytes_interval = 0
+						self.last_update_time = now
+
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
 					totalBytes += len(data)
@@ -146,6 +195,9 @@ class Client:
 					else:
 						print(f"  + Reassembling Frame {rtpPacket.seqNum()}")
 			except:
+				if self.state == self.INIT:
+					break
+
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.is_set():
 					break
@@ -162,6 +214,59 @@ class Client:
 		if endTime - startTime > 0:
 			print(f"Speed: {(totalBytes / (endTime - startTime)):.2f} bytes/s")
 
+	def showSpeedGraph(self):
+		"""Tạo cửa sổ mới để hiển thị biểu đồ thời gian thực."""
+		if not self.stats_time:
+			tkMessageBox.showinfo("No Data", "Chưa có dữ liệu. Vui lòng nhấn Play trước.")
+			return
+		if self.stats_window is not None and self.stats_window.winfo_exists():
+			self.stats_window.lift() # Đưa cửa sổ lên trên nếu đã tồn tại
+			return
+
+		# Tạo cửa sổ phụ
+		self.stats_window = Toplevel(self.master)
+		self.stats_window.title("Real-time Transmission Stats")
+		self.stats_window.configure(bg='black')
+		
+		# Thiết lập Figure của Matplotlib
+		self.fig, self.ax = plt.subplots(figsize=(5, 4), dpi=100)
+		self.fig.patch.set_facecolor('black') # Màu nền ngoài biểu đồ
+		self.ax.set_facecolor('black')        # Màu nền trong biểu đồ
+		
+		self.line, = self.ax.plot([], [], color='lime', linewidth=2)
+		self.ax.set_title("Network Speed (KB/s)", color='white')
+		self.ax.set_xlabel("Time (s)", color='white')
+		self.ax.set_ylabel("Speed (KB/s)", color='white')
+
+		self.ax.tick_params(axis='x', colors='white')
+		self.ax.tick_params(axis='y', colors='white')
+
+		for spine in self.ax.spines.values():
+			spine.set_edgecolor('white')
+		self.ax.grid(True, color='gray', linestyle='--', alpha=0.5)
+
+		self.canvas = FigureCanvasTkAgg(self.fig, master=self.stats_window)
+		self.canvas.get_tk_widget().pack(fill=BOTH, expand=True)
+		self.canvas.get_tk_widget().configure(bg='black')
+
+		self.update_stats_plot()
+
+	def update_stats_plot(self):
+		"""Hàm cập nhật biểu đồ định kỳ."""
+		if self.state == self.INIT or self.stats_window is None or not self.stats_window.winfo_exists():
+			return
+
+		if self.stats_time:
+			# Cập nhật dữ liệu cho đường vẽ
+			self.line.set_data(self.stats_time, self.stats_speed)
+			
+			# Tự động căn chỉnh trục
+			self.ax.set_xlim(min(self.stats_time), max(self.stats_time))
+			self.ax.set_ylim(0, max(self.stats_speed) * 1.2 if self.stats_speed else 100)
+			self.canvas.draw()
+
+		# Gọi lại sau 500ms
+		self.stats_after_id = self.stats_window.after(500, self.update_stats_plot)
 
 	def playBuffer(self):
 		if self.state == self.PLAYING:
@@ -175,9 +280,10 @@ class Client:
 			else:
 				print("Buffer is empty!, please wait for data form Server")
 				self.init_buffer = True
-			self.master.after(40, self.playBuffer)
+			self.buffer_after_id = self.master.after(40, self.playBuffer)
 		else: 
-			return;
+			return
+
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
 		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
@@ -340,9 +446,31 @@ class Client:
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
-		self.pauseMovie()
+		# self.pauseMovie()
 		if tkMessageBox.askokcancel("Quit?", "Are you sure you want to quit?"):
 			self.exitClient()
 		else: # When the user presses cancel, resume playing.
 			self.playMovie()
 
+	def closeStatsWindow(self):
+		if hasattr(self, 'stats_after_id') and self.stats_after_id:
+			try:
+				self.stats_window.after_cancel(self.stats_after_id)
+			except Exception:
+				pass
+			self.stats_after_id = None
+
+		# 2. Hủy canvas
+		if hasattr(self, 'canvas'):
+			self.canvas.get_tk_widget().destroy()
+			self.canvas = None
+
+		# 3. Đóng Matplotlib figure (RẤT QUAN TRỌNG)
+		if hasattr(self, 'fig'):
+			plt.close(self.fig)
+			self.fig = None
+
+		# 4. Đóng cửa sổ Tkinter
+		if self.stats_window:
+			self.stats_window.destroy()
+			self.stats_window = None
