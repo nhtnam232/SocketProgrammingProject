@@ -53,6 +53,10 @@ class Client:
 		self.stats_window = None # Cửa sổ vẽ biểu đồ
 		self.stats_after_id = None  # ID cho biểu đồ
 		self.buffer_after_id = None # ID cho playBuffer
+
+		self.timer_is_running = False
+		self.elapsedTime = -1
+		self.timer_after_id = None
 		
 	def createWidgets(self):
 		"""Build GUI."""
@@ -60,36 +64,40 @@ class Client:
 		self.setup = Button(self.master, width=15, padx=3, pady=3)
 		self.setup["text"] = "Setup"
 		self.setup["command"] = self.setupMovie
-		self.setup.grid(row=1, column=0, padx=2, pady=2)
+		self.setup.grid(row=2, column=0, padx=2, pady=2)
 		
 		# Create Play button		
 		self.start = Button(self.master, width=15, padx=3, pady=3)
 		self.start["text"] = "Play"
 		self.start["command"] = self.playMovie
-		self.start.grid(row=1, column=1, padx=2, pady=2)
+		self.start.grid(row=2, column=1, padx=2, pady=2)
 		
 		# Create Pause button			
 		self.pause = Button(self.master, width=15, padx=3, pady=3)
 		self.pause["text"] = "Pause"
 		self.pause["command"] = self.pauseMovie
-		self.pause.grid(row=1, column=2, padx=2, pady=2)
+		self.pause.grid(row=2, column=2, padx=2, pady=2)
 		
 		# Create Teardown button
 		self.teardown = Button(self.master, width=15, padx=3, pady=3)
 		self.teardown["text"] = "Teardown"
 		self.teardown["command"] =  self.exitClient
-		self.teardown.grid(row=1, column=3, padx=2, pady=2)
+		self.teardown.grid(row=2, column=3, padx=2, pady=2)
 
 		self.stats = Button(self.master, width=15, padx=3, pady=3)
 		self.stats["text"] = "Speed Graph"
 		self.stats["command"] = self.showSpeedGraph
-		self.stats.grid(row=1, column=4, padx=2, pady=2)
+		self.stats.grid(row=2, column=4, padx=2, pady=2)
 		
 		# Create a label to display the movie
 		self.label = Label(self.master)
 		self.label.grid(row=0, column=0, columnspan=5, sticky=W+E+N+S, padx=5, pady=5)
 		MIN_HEIGHT_PIXELS = 300
 		self.master.grid_rowconfigure(0, minsize=MIN_HEIGHT_PIXELS, weight=1)
+
+		# Timer
+		self.timeLabel = Label(self.master, text="00:00")
+		self.timeLabel.grid(row=1, column=0, columnspan=5, sticky=S, pady=10)
 
 	def updateButtonStates(self):
 		"""Cập nhật trạng thái các nút dựa trên trạng thái RTSP hiện tại."""
@@ -114,6 +122,18 @@ class Client:
 			self.start.config(state=DISABLED)
 			self.pause.config(state=NORMAL)
 			self.teardown.config(state=NORMAL)
+
+	def updateTimer(self):
+		"""Cập nhật bộ đếm thời gian mỗi giây."""
+		if self.timer_is_running:
+			self.elapsedTime += 1
+			mins = self.elapsedTime // 60
+			secs = self.elapsedTime % 60
+			timeStr = f"{mins:02d}:{secs:02d}"
+			self.timeLabel.config(text=timeStr)
+
+			# Luôn đăng ký sau 1 giây để kiểm tra lại trạng thái
+			self.timer_after_id = self.master.after(1000, self.updateTimer)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -123,6 +143,11 @@ class Client:
 	def exitClient(self):
 		"""Teardown button handler."""
 		self.sendRtspRequest(self.TEARDOWN)
+
+		if self.timer_after_id:
+			self.master.after_cancel(self.timer_after_id)
+			self.timer_after_id = None
+		self.elapsedTime = 0
 
 		if hasattr(self, 'buffer_after_id') and self.buffer_after_id:
 			self.master.after_cancel(self.buffer_after_id)
@@ -136,6 +161,12 @@ class Client:
 		"""Pause button handler."""
 		if self.state == self.PLAYING:
 			self.sendRtspRequest(self.PAUSE)
+
+			if self.timer_is_running:
+				self.timer_is_running = False
+				if self.timer_after_id is not None:
+					self.master.after_cancel(self.timer_after_id)
+					self.timer_after_id = None
 	
 	def playMovie(self):
 		"""Play button handler."""
@@ -145,6 +176,10 @@ class Client:
 			self.playEvent = threading.Event()
 			self.playEvent.clear()
 			self.sendRtspRequest(self.PLAY)
+
+			if self.timer_after_id is None:
+				self.timer_is_running = True
+				self.updateTimer()
 	
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
@@ -280,9 +315,11 @@ class Client:
 					data = self.frameQueue.get()
 					self.updateMovie(self.writeFrame(data))
 					self.init_buffer = False
+				self.timer_is_running = True
 			else:
 				print("Buffer is empty!, please wait for data form Server")
 				self.init_buffer = True
+				self.timer_is_running = False
 			self.buffer_after_id = self.master.after(40, self.playBuffer)
 		else: 
 			return
