@@ -49,6 +49,7 @@ class Client:
 		self.total_bytes_interval = 0
 		self.last_update_time = time.time()
 		self.start_time = time.time()
+		self.accumulated_time = 0
 		self.stats_window = None # Cửa sổ vẽ biểu đồ
 		self.stats_after_id = None  # ID cho biểu đồ
 		self.buffer_after_id = None # ID cho playBuffer
@@ -164,7 +165,7 @@ class Client:
 					now = time.time()
 					
 					if now - self.last_update_time >= 0.5:
-						elapsed = now - self.start_time
+						elapsed = self.accumulated_time + (now - self.start_time)
 						speed = (self.total_bytes_interval / (now - self.last_update_time)) / 1024 # KB/s
 						
 						self.stats_time.append(elapsed)
@@ -195,6 +196,8 @@ class Client:
 					else:
 						print(f"  + Reassembling Frame {rtpPacket.seqNum()}")
 			except:
+				self.accumulated_time += (time.time() - self.start_time)
+
 				if self.state == self.INIT:
 					break
 
